@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHANTOM — Ephemeral Messaging</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:      #04070d;
+            --bg2:     #080d1a;
+            --fg:      #ddd8cc;
+            --dim:     #485060;
+            --border:  rgba(255,255,255,0.07);
+            --accent:  #ff3b2f;
+            --amber:   #f5c842;
+            --green:   #32e877;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--fg);
+            font-family: 'IBM Plex Mono', 'Courier New', monospace;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Scanline overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 3px,
+                rgba(0,0,0,0.04) 3px,
+                rgba(0,0,0,0.04) 4px
+            );
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* ── Screens ───────────────────────────── */
+        .screen {
+            display: none;
+            flex-direction: column;
+            width: 100%;
+            max-width: 560px;
+            padding: 40px 32px;
+            animation: fadeUp 0.35s ease;
+        }
+        .screen.active { display: flex; }
+
+        #screen-chat {
+            max-width: 680px;
+            height: 100vh;
+            padding: 28px 32px;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Logo ───────────────────────────────── */
+        .logo {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(72px, 18vw, 128px);
+            letter-spacing: 10px;
+            line-height: 1;
+            color: var(--fg);
+        }
+        .logo .cursor {
+            color: var(--accent);
+            animation: blink 1.1s step-end infinite;
+            font-size: 0.45em;
+            vertical-align: middle;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .tagline {
+            font-size: 10px;
+            letter-spacing: 5px;
+            color: var(--dim);
+            text-transform: uppercase;
+            margin-top: 4px;
+            margin-bottom: 40px;
+        }
+
+        /* ── Feature list ─────────────────────── */
+        .features { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
+        .feature-item { font-size: 11px; color: var(--dim); letter-spacing: 1px; display: flex; gap: 10px; }
+        .feature-item .dot { color: var(--amber); flex-shrink: 0; }
+
+        /* ── Buttons ─────────────────────────── */
+        .btn {
+            background: var(--fg);
+            color: var(--bg);
+            border: none;
+            padding: 14px 36px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s;
+            align-self: flex-start;
+        }
+        .btn:hover { background: var(--amber); }
+        .btn-ghost {
+            background: none;
+            color: var(--dim);
+            border: 1px solid var(--border);
+            padding: 12px 28px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            align-self: flex-start;
+        }
+        .btn-ghost:hover { color: var(--fg); border-color: rgba(255,255,255,0.3); }
+
+        /* ── Waiting screen ────────────────────── */
+        .mini-logo {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 40px;
+            letter-spacing: 6px;
+            margin-bottom: 4px;
+        }
+
+        .section-label {
+            font-size: 9px;
+            letter-spacing: 4px;
+            color: var(--dim);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .link-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            padding: 14px 16px;
+            margin-bottom: 28px;
+            cursor: pointer;
+        }
+        .link-box:hover { border-color: rgba(255,255,255,0.15); }
+
+        .link-text {
+            flex: 1;
+            font-size: 11px;
+            color: var(--amber);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            letter-spacing: 0.5px;
+        }
+
+        .copy-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--dim);
+            padding: 6px 14px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 9px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .copy-btn:hover { color: var(--fg); border-color: rgba(255,255,255,0.3); }
+
+        .pulse-row { display: flex; align-items: center; gap: 10px; }
+        .pulse-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--amber);
+            animation: pulse 1.8s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+        @keyframes pulse {
+            0%,100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.25; transform: scale(0.7); }
+        }
+        .waiting-label { font-size: 11px; color: var(--dim); letter-spacing: 2px; }
+
+        .notice {
+            margin-top: 28px;
+            border-left: 2px solid var(--accent);
+            padding-left: 14px;
+            font-size: 10px;
+            color: var(--dim);
+            letter-spacing: 1px;
+            line-height: 2;
+        }
+
+        /* ── Chat screen ─────────────────────── */
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .chat-logo {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 30px;
+            letter-spacing: 5px;
+        }
+        .conn-status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: var(--green);
+            text-transform: uppercase;
+        }
+        .conn-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+            animation: connPulse 2s ease-in-out infinite;
+        }
+        @keyframes connPulse {
+            0%,100% { box-shadow: 0 0 6px var(--green); }
+            50%      { box-shadow: 0 0 14px var(--green); }
+        }
+
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 20px 0;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+        #messages::-webkit-scrollbar { width: 4px; }
+        #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        .empty-hint {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--dim);
+        }
+        .empty-hint .lock-icon { font-size: 28px; margin-bottom: 4px; }
+        .empty-hint p { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; }
+
+        /* ── Message bubbles ─────────────────── */
+        .message {
+            display: flex;
+            flex-direction: column;
+            max-width: 76%;
+            animation: msgIn 0.25s ease;
+        }
+        @keyframes msgIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .message.sent { align-self: flex-end; align-items: flex-end; }
+        .message.received { align-self: flex-start; align-items: flex-start; }
+
+        .msg-label {
+            font-size: 8px;
+            letter-spacing: 3px;
+            color: var(--dim);
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        .msg-bubble {
+            padding: 11px 16px;
+            font-size: 13px;
+            line-height: 1.65;
+            word-break: break-word;
+        }
+        .message.sent .msg-bubble {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.09);
+        }
+        .message.received .msg-bubble {
+            background: rgba(245,200,66,0.04);
+            border: 1px solid rgba(245,200,66,0.14);
+        }
+
+        .msg-timer {
+            font-size: 9px;
+            letter-spacing: 1.5px;
+            color: var(--dim);
+            margin-top: 5px;
+            transition: color 0.3s;
+        }
+        .msg-timer.burning { color: var(--accent); }
+
+        .message.dying {
+            animation: dissolve 1s ease forwards;
+        }
+        @keyframes dissolve {
+            from { opacity: 1; max-height: 200px; }
+            to   { opacity: 0; max-height: 0; margin: 0; overflow: hidden; }
+        }
+
+        /* ── Input area ──────────────────────── */
+        .input-area {
+            display: flex;
+            gap: 8px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        #msg-input {
+            flex: 1;
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            padding: 13px 16px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        #msg-input:focus { border-color: rgba(255,255,255,0.18); }
+        #msg-input::placeholder { color: var(--dim); }
+
+        .send-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--dim);
+            padding: 13px 22px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .send-btn:hover { color: var(--amber); border-color: var(--amber); }
+
+        /* ── Terminated screen ───────────────── */
+        .term-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 56px;
+            letter-spacing: 5px;
+            color: var(--accent);
+            margin-bottom: 8px;
+            line-height: 1;
+        }
+        .term-body {
+            font-size: 11px;
+            color: var(--dim);
+            letter-spacing: 1px;
+            line-height: 2.2;
+            margin-bottom: 36px;
+        }
+
+        /* ── Error ───────────────────────────── */
+        .error-text {
+            font-size: 10px;
+            color: var(--accent);
+            letter-spacing: 1.5px;
+            margin-top: 18px;
+            line-height: 1.8;
+        }
+
+        /* ── Connecting indicator ─────────────── */
+        .connecting-text {
+            font-size: 11px;
+            color: var(--dim);
+            letter-spacing: 2px;
+            animation: connecting 1.5s ease-in-out infinite;
+        }
+        @keyframes connecting {
+            0%,100% { opacity: 1; }
+            50%      { opacity: 0.4; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ══ LANDING ══════════════════════════════ -->
+<div id="screen-landing" class="screen active">
+    <div class="logo">PHANTOM<span class="cursor">▌</span></div>
+    <p class="tagline">Zero-trace peer-to-peer messaging</p>
+
+    <div class="features">
+        <div class="feature-item"><span class="dot">◆</span> Messages vanish 10 seconds after reading</div>
+        <div class="feature-item"><span class="dot">◆</span> Direct P2P — messages never touch a server</div>
+        <div class="feature-item"><span class="dot">◆</span> One link. One session. No identity required.</div>
+        <div class="feature-item"><span class="dot">◆</span> Link dies the moment someone connects</div>
+    </div>
+
+    <button class="btn" onclick="createSession()">Create Session</button>
+</div>
+
+<!-- ══ WAITING ══════════════════════════════ -->
+<div id="screen-waiting" class="screen">
+    <div class="mini-logo">PHANTOM</div>
+    <p class="tagline" style="margin-bottom: 32px;">Session ready. Awaiting connection.</p>
+
+    <div id="share-section">
+        <p class="section-label">Share this link — expires on first use</p>
+        <div class="link-box" onclick="copyLink()">
+            <span class="link-text" id="share-link-text">Generating...</span>
+            <button class="copy-btn" id="copy-btn">Copy</button>
+        </div>
+        <div class="pulse-row">
+            <span class="pulse-dot"></span>
+            <span class="waiting-label">Waiting for the other person...</span>
+        </div>
+    </div>
+
+    <div id="joining-section" style="display:none;">
+        <div class="pulse-row">
+            <span class="pulse-dot"></span>
+            <span class="connecting-text">Establishing encrypted channel...</span>
+        </div>
+    </div>
+
+    <div class="notice">
+        No accounts. No logs. No trace.<br>
+        Close this tab and the session vanishes.
+    </div>
+
+    <div id="error-area"></div>
+</div>
+
+<!-- ══ CHAT ═════════════════════════════════ -->
+<div id="screen-chat" class="screen">
+    <div class="chat-header">
+        <span class="chat-logo">PHANTOM</span>
+        <div class="conn-status">
+            <div class="conn-dot"></div>
+            Secure channel active
+        </div>
+    </div>
+
+    <div id="messages">
+        <div class="empty-hint" id="empty-hint">
+            <div class="lock-icon">🔒</div>
+            <p>End-to-end encrypted</p>
+            <p style="color: var(--dim); font-size:9px; letter-spacing:2px; margin-top:4px;">Messages disappear 10s after received</p>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <input
+            type="text"
+            id="msg-input"
+            placeholder="Write something..."
+            autocomplete="off"
+            onkeydown="handleKey(event)"
+        />
+        <button class="send-btn" onclick="sendMessage()">Send →</button>
+    </div>
+</div>
+
+<!-- ══ TERMINATED ════════════════════════════ -->
+<div id="screen-terminated" class="screen">
+    <div class="term-title">SESSION<br>TERMINATED</div>
+    <p class="term-body">
+        The connection has been severed.<br>
+        All messages have been destroyed.<br>
+        This session ID will never exist again.
+    </p>
+    <button class="btn" onclick="newSession()">Start New Session</button>
+</div>
+
+<script>
+    // ── State ───────────────────────────────────
+    let peer = null;
+    let conn = null;
+    let shareUrl = '';
+    const pendingTimers = {};
+
+    // ── Boot ────────────────────────────────────
+    window.addEventListener('load', () => {
+        const hash = window.location.hash.slice(1);
+        if (hash) {
+            joinSession(hash);
+        }
+    });
+
+    // ── Screen switching ────────────────────────
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        const el = document.getElementById(id);
+        el.classList.add('active');
+    }
+
+    // ── Create session (host) ────────────────────
+    function createSession() {
+        const btn = document.querySelector('#screen-landing .btn');
+        btn.textContent = 'Creating...';
+        btn.disabled = true;
+
+        peer = new Peer(undefined, {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
+                ]
+            }
+        });
+
+        peer.on('open', (id) => {
+            // Build shareable URL
+            const base = window.location.href.split('#')[0];
+            shareUrl = base + '#' + id;
+            document.getElementById('share-link-text').textContent = shareUrl;
+            showScreen('screen-waiting');
+            document.getElementById('share-section').style.display = 'block';
+            document.getElementById('joining-section').style.display = 'none';
+
+            // Wait for incoming connection
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupConnection();
+            });
+        });
+
+        peer.on('error', (err) => {
+            btn.textContent = 'Create Session';
+            btn.disabled = false;
+            alert('Could not create session: ' + err.type + '. Check your internet connection.');
+        });
+    }
+
+    // ── Join session (guest) ─────────────────────
+    function joinSession(hostId) {
+        showScreen('screen-waiting');
+        document.getElementById('share-section').style.display = 'none';
+        document.getElementById('joining-section').style.display = 'block';
+
+        peer = new Peer(undefined, {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
+                ]
+            }
+        });
+
+        peer.on('open', () => {
+            conn = peer.connect(hostId, { reliable: true });
+
+            conn.on('open', () => {
+                // Clear hash so the link can't be reused
+                history.replaceState(null, '', window.location.pathname);
+                setupConnection();
+            });
+
+            conn.on('error', () => {
+                showError('Could not connect. The link may have expired or already been used.');
+            });
+        });
+
+        peer.on('error', (err) => {
+            showError('Connection failed: ' + err.type);
+        });
+
+        setTimeout(() => {
+            if (!conn || !conn.open) {
+                showError('Connection timed out. The session may no longer exist.');
+            }
+        }, 20000);
+    }
+
+    // ── Setup shared connection logic ────────────
+    function setupConnection() {
+        showScreen('screen-chat');
+        document.getElementById('msg-input').focus();
+
+        conn.on('data', (data) => {
+            if (data.type === 'message') {
+                addMessage(data.text, data.id, 'received');
+                // Acknowledge read
+                try { conn.send({ type: 'read', id: data.id }); } catch(e){}
+                // Start 10s self-destruct on our side
+                startCountdown(data.id, 10);
+            }
+            if (data.type === 'read') {
+                // Other person received our message — start our 10s timer
+                startCountdown(data.id, 10);
+                updateTimerLabel(data.id, '⏳ Read — disappears in 10s');
+            }
+        });
+
+        conn.on('close', terminate);
+        conn.on('error', terminate);
+    }
+
+    // ── Send message ─────────────────────────────
+    function sendMessage() {
+        const input = document.getElementById('msg-input');
+        const text = input.value.trim();
+        if (!text) return;
+        if (!conn || !conn.open) {
+            input.style.borderColor = 'var(--accent)';
+            setTimeout(() => { input.style.borderColor = ''; }, 1000);
+            return;
+        }
+
+        const id = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+        conn.send({ type: 'message', id, text });
+        addMessage(text, id, 'sent');
+        input.value = '';
+    }
+
+    function handleKey(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    }
+
+    // ── Display a message bubble ─────────────────
+    function addMessage(text, id, type) {
+        const hint = document.getElementById('empty-hint');
+        if (hint) hint.remove();
+
+        const container = document.getElementById('messages');
+
+        const wrap = document.createElement('div');
+        wrap.className = 'message ' + type;
+        wrap.id = 'wrap-' + id;
+
+        const label = document.createElement('div');
+        label.className = 'msg-label';
+        label.textContent = type === 'sent' ? 'You' : 'Them';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'msg-bubble';
+        bubble.textContent = text;
+
+        const timer = document.createElement('div');
+        timer.className = 'msg-timer';
+        timer.id = 'timer-' + id;
+        timer.textContent = type === 'sent' ? '⌛ Awaiting read receipt...' : '✓ Received';
+
+        wrap.appendChild(label);
+        wrap.appendChild(bubble);
+        wrap.appendChild(timer);
+        container.appendChild(wrap);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // ── Countdown & deletion ─────────────────────
+    function startCountdown(id, seconds) {
+        // Prevent double-timers
+        if (pendingTimers[id]) return;
+
+        let remaining = seconds;
+
+        const tick = () => {
+            remaining--;
+            const timerEl = document.getElementById('timer-' + id);
+            if (timerEl) {
+                timerEl.textContent = '🔥 Disappears in ' + remaining + 's';
+                if (remaining <= 3) timerEl.classList.add('burning');
+            }
+            if (remaining <= 0) {
+                destroyMessage(id);
+            } else {
+                pendingTimers[id] = setTimeout(tick, 1000);
+            }
+        };
+
+        // First tick now
+        const timerEl = document.getElementById('timer-' + id);
+        if (timerEl) {
+            timerEl.textContent = '🔥 Disappears in ' + remaining + 's';
+            if (remaining <= 3) timerEl.classList.add('burning');
+        }
+        pendingTimers[id] = setTimeout(tick, 1000);
+    }
+
+    function updateTimerLabel(id, text) {
+        const el = document.getElementById('timer-' + id);
+        if (el) el.textContent = text;
+    }
+
+    function destroyMessage(id) {
+        clearTimeout(pendingTimers[id]);
+        delete pendingTimers[id];
+        const el = document.getElementById('wrap-' + id);
+        if (el) {
+            el.classList.add('dying');
+            setTimeout(() => { if (el.parentNode) el.remove(); }, 1000);
+        }
+    }
+
+    // ── Copy link ────────────────────────────────
+    function copyLink() {
+        if (!shareUrl) return;
+        navigator.clipboard.writeText(shareUrl).catch(() => {
+            // Fallback
+            const ta = document.createElement('textarea');
+            ta.value = shareUrl;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+        });
+        const btn = document.getElementById('copy-btn');
+        btn.textContent = 'Copied!';
+        btn.style.color = 'var(--green)';
+        setTimeout(() => {
+            btn.textContent = 'Copy';
+            btn.style.color = '';
+        }, 2500);
+    }
+
+    // ── Terminate session ────────────────────────
+    function terminate() {
+        Object.keys(pendingTimers).forEach(id => {
+            clearTimeout(pendingTimers[id]);
+            delete pendingTimers[id];
+        });
+        showScreen('screen-terminated');
+    }
+
+    function showError(msg) {
+        const area = document.getElementById('error-area');
+        if (!area) return;
+        area.innerHTML = '<div class="error-text">' + msg + '</div>';
+    }
+
+    function newSession() {
+        history.replaceState(null, '', window.location.pathname);
+        location.reload();
+    }
+</script>
+</body>
+</html>
